@@ -1,0 +1,36 @@
+version: "3"
+
+volumes:
+  postgres_db:
+
+
+services:
+
+  diaspora:
+    build:
+      context: .
+      dockerfile: Dockerfile.diaspora
+      args:
+        EXT_UID: "${EXT_UID}"
+        EXT_GID: "${EXT_GID}"
+    image: diaspora:dev-latest
+    environment:
+      DIASPORA_DOCKER_DEV_INSTALL_GEMS: "${DIASPORA_DOCKER_DEV_INSTALL_GEMS}"
+      DIASPORA_DOCKER_DEV_DB_MIGRATE: "${DIASPORA_DOCKER_DEV_DB_MIGRATE}"
+    ports:
+      - 8080:3000
+    volumes:
+      - ./diaspora.docker:/home/diaspora/diaspora:rw
+    depends_on:
+      - postgres
+#      - redis
+
+  postgres:
+    image: postgres:9.6
+    ports:
+      - 55432:5432
+    volumes:
+      - postgres_db:/var/lib/postgresql
+
+#  redis:
+#    image: redis:latest

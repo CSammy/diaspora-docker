@@ -1,0 +1,65 @@
+FROM debian:stretch as base
+
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+    && apt-get install -y -qq \
+        build-essential \
+        libssl-dev \
+        libcurl4-openssl-dev \
+        libxml2-dev \
+        libxslt-dev \
+        imagemagick \
+        ghostscript \
+        curl \
+        libmagickwand-dev \
+        git \
+        libpq-dev \
+        cmake \
+        nodejs \
+        # Packages for RVM
+        gawk \
+        libyaml-dev \
+        libsqlite3-dev \
+        sqlite3 \
+        autoconf \
+        libgmp-dev \
+        libgdbm-dev \
+        libncurses5-dev \
+        automake \
+        bison \
+        libffi-dev \
+        libgmp-dev \
+        libreadline-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG EXT_UID
+ARG EXT_GID
+RUN addgroup --system --gid ${EXT_GID} diaspora
+RUN adduser --system --uid ${EXT_UID} --gid ${EXT_GID} diaspora
+
+USER diaspora
+RUN mkdir /home/diaspora/diaspora
+WORKDIR /home/diaspora/diaspora
+
+# Install RVM + Ruby
+ENV LANG=C.UTF8
+
+RUN curl -sSL https://rvm.io/mpapis.asc | gpg --import - \
+    && curl -L https://s.diaspora.software/1t | bash \
+    && rm -rf ~/.gnupg
+SHELL ["/bin/bash", "--login", "-c"]
+
+RUN rvm install 2.4
+
+# Install bundler
+RUN echo diaspora > .ruby-gemset \
+    && echo 2.4 > .ruby-version \
+    && touch Gemfile \
+    && cd ../diaspora \
+    && gem install bundler \
+    && rm .ruby-* Gemfile
+
+# Finish setup
+COPY ./start.sh ../start.sh
+
+CMD ["../start.sh"]
