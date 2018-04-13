@@ -1,0 +1,87 @@
+#!/bin/bash
+
+print_usage() {
+  echo "$SCRIPT_NAME COMMAND"
+  echo
+  echo "COMMAND"
+  echo "  build"
+#  echo "  bundle"
+#  echo "  migrate"
+#  echo "  setup"
+  echo "  start"
+  echo "  stop"
+#  echo "  clean"
+#  echo "  rspec"
+}
+
+dia_setup() {
+  dia_build
+  # This is just a temporary (dev-only) solution
+  [ ! -f $DIASPORA_PATH/public/source.tar.gz ] && touch $DIASPORA_PATH/public/source.tar.gz
+  # do bundle install
+  # start db container
+  # do db migrate
+  # start dia container
+}
+
+dia_build() {
+  docker-compose build diaspora
+}
+
+dia_start() {
+  docker-compose up
+}
+
+dia_stop() {
+  docker-compose stop
+}
+
+
+SCRIPT_NAME=$(basename $0)
+SCRIPT_PATH=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
+DIASPORA_PATH=
+
+if [ -z "$UID" -o -z "$GID" ]; then
+  # $UID is not builtin, determine using a program
+  if ! type "id" 2>&1 >/dev/null; then
+    echo "Fatal: Cannot determine UID or GID."
+    exit 1
+  fi
+  EXT_UID=$(id -u)
+  EXT_GID=$(id -g)
+else
+  EXT_UID=$UID
+  EXT_GID=$GID
+fi
+
+export EXT_UID
+export EXT_GID
+export DIASPORA_PATH
+
+if [ $# -lt 1 ]; then
+  print_usage
+  exit 1
+fi
+
+command=$1
+shift
+
+case $command in
+  --help|-h)
+    print_usage
+    exit 0
+    ;;
+  build)
+    dia_build
+    ;;
+  start)
+    dia_start
+    ;;
+  stop)
+    dia_stop
+    ;;
+  *)
+    print_usage
+    exit 1
+    ;;
+esac
