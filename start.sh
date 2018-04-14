@@ -2,7 +2,6 @@
 
 action_install_gems() {
   script/configure_bundler
-  bin/bundle config --local path vendor/bundle
   bin/bundle install --full-index
 }
 
