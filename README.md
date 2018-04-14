@@ -17,3 +17,4 @@ This image is intended exclusively for development.
 
 - Control migrations and bundle installing more intuitively
 - Create external script for controlling/handling the setup
+- RVM env with proper commands (`rvm gemset create 2.4@diaspora && rvm ruby-2.4@diaspora do gem install bundler`) instead of building a "skeleton" by hand (see also https://github.com/SuperTux88/diaspora-formula/blob/master/diaspora/install.sls)
