@@ -6,6 +6,7 @@ RUN apt-get update \
         build-essential \
         libssl-dev \
         libcurl4-openssl-dev \
+        libidn11-dev \
         libxml2-dev \
         libxslt-dev \
         imagemagick \
