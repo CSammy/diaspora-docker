@@ -3,70 +3,88 @@
 print_usage() {
   echo "$SCRIPT_NAME COMMAND"
   echo
-  echo "COMMAND"
-  echo "  build"
-#  echo "  bundle"
-#  echo "  migrate"
-#  echo "  setup"
-  echo "  start"
-  echo "  stop"
-#  echo "  clean"
+  echo "Commands:"
+  echo "  build           Rebuild image"
+  echo "  bundle          Install gems using bundle"
+  echo "  migrate         Execute pending migrations (incl. database setup)"
+  echo "  setup           Build, bundle and migrate"
+  echo "  start           Start diaspora\* incl. database"
+  echo "  stop            Stop all diaspora\*-related containers"
+  echo "  clean           Delete all diaspora\*-related containers and volumes"
+  echo "  status          Show currently running containers and related images"
 #  echo "  rspec"
+}
+
+dia_build() {
+  if [ -z "$UID" -o -z "$GID" ]; then
+    # $UID is not builtin, determine using a program
+    if ! type "id" 2>&1 >/dev/null; then
+      echo "Fatal: Cannot determine UID or GID."
+      exit 1
+    fi
+    EXT_UID=$(id -u)
+    EXT_GID=$(id -g)
+  else
+    EXT_UID=$UID
+    EXT_GID=$GID
+  fi
+  docker-compose rm -v diaspora
+  EXT_UID=$EXT_UID EXT_GID=$EXT_GID docker-compose -f docker-compose.build.yml build diaspora
+}
+
+dia_bundle() {
+  docker-compose up $option diaspora-bundle
+  docker-compose rm --stop -v --force diaspora-bundle
+}
+
+dia_migrate() {
+  docker-compose up $option diaspora-migrations
 }
 
 dia_setup() {
   dia_build
   # This is just a temporary (dev-only) solution
   [ ! -f $DIASPORA_PATH/public/source.tar.gz ] && touch $DIASPORA_PATH/public/source.tar.gz
-  # do bundle install
-  # start db container
-  # do db migrate
-  # start dia container
-}
-
-dia_build() {
-  docker-compose build diaspora
+  dia_bundle
+  dia_migrate
 }
 
 dia_start() {
-  docker-compose up
+  docker-compose up $option diaspora
 }
 
 dia_stop() {
   docker-compose stop
 }
 
+dia_clean() {
+  docker-compose down
+}
+
+dia_status() {
+  docker-compose ps
+  docker-compose images
+}
+
 
 SCRIPT_NAME=$(basename $0)
 SCRIPT_PATH=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
-DIASPORA_PATH=
+export DIASPORA_PATH=./diaspora.docker
+export DIASPORA_DOCKER_DB=postgresql
 
-if [ -z "$UID" -o -z "$GID" ]; then
-  # $UID is not builtin, determine using a program
-  if ! type "id" 2>&1 >/dev/null; then
-    echo "Fatal: Cannot determine UID or GID."
-    exit 1
-  fi
-  EXT_UID=$(id -u)
-  EXT_GID=$(id -g)
-else
-  EXT_UID=$UID
-  EXT_GID=$GID
-fi
-
-export EXT_UID
-export EXT_GID
-export DIASPORA_PATH
 
 if [ $# -lt 1 ]; then
   print_usage
   exit 1
 fi
 
-command=$1
+dia_command=$1
 shift
+if [ $# -eq 1 -a "$1" -eq "-d" ]; then
+  export option="-d"
+fi
 
-case $command in
+case $dia_command in
   --help|-h)
     print_usage
     exit 0
@@ -74,11 +92,26 @@ case $command in
   build)
     dia_build
     ;;
+  bundle)
+    dia_bundle
+    ;;
+  migrate)
+    dia_migrate
+    ;;
+  setup)
+    dia_setup
+    ;;
   start)
     dia_start
     ;;
   stop)
     dia_stop
+    ;;
+  clean)
+    dia_clean
+    ;;
+  status)
+    dia_status
     ;;
   *)
     print_usage

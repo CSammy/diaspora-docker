@@ -1,7 +1,7 @@
 FROM ruby:2.4.4-slim-stretch
 
-ARG DEBIAN_FRONTEND=noninteractive
-RUN apt-get update \
+RUN DEBIAN_FRONTEND=noninteractive \
+    apt-get update \
     && apt-get install -y -qq \
         build-essential \
         libssl-dev \
@@ -21,8 +21,8 @@ RUN apt-get update \
 
 ARG EXT_UID
 ARG EXT_GID
-RUN addgroup --system --gid ${EXT_GID} diaspora
-RUN adduser --system --uid ${EXT_UID} --gid ${EXT_GID} diaspora
+RUN addgroup --system --gid ${EXT_GID} diaspora \
+    && adduser --system --uid ${EXT_UID} --gid ${EXT_GID} diaspora
 
 USER diaspora
 ENV DIASPORA_HOME /home/diaspora/diaspora
@@ -31,11 +31,8 @@ WORKDIR $DIASPORA_HOME
 
 ENV GEM_HOME $DIASPORA_HOME/vendor/bundle
 ENV BUNDLE_PATH="$GEM_HOME" \
-        BUNDLE_BIN="$GEM_HOME/bin" \
-        BUNDLE_APP_CONFIG="$DIASPORA_HOME/.bundle"
+    BUNDLE_BIN="$GEM_HOME/bin" \
+    BUNDLE_APP_CONFIG="$DIASPORA_HOME/.bundle"
 ENV PATH $BUNDLE_BIN:$PATH
 
-# Finish setup
-COPY ./start.sh ../start.sh
-
-CMD ["../start.sh"]
+CMD ["./script/server"]
