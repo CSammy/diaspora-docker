@@ -30,14 +30,18 @@ dia_fetch_upstream() {
 }
 
 dia_is_configured() {
-  return [ -f "$DIASPORA_CONFIG_DB" ] \
-    && (grep -qE '^\s*<<:\s*\*postgresql\b' "$DIASPORA_CONFIG_DB" \
-      && grep -q '^  host: postgresql$' "$DIASPORA_CONFIG_DB" \
-      && grep -q '^  password: postgres$' "$DIASPORA_CONFIG_DB" \
-      || grep -qE '^\s*<<:\s*\*mysql\b' "$DIASPORA_CONFIG_DB" \
-      && grep -q '^  host: mysql$' "$DIASPORA_CONFIG_DB" \
-      && grep -q '^  password: mysql$' "$DIASPORA_CONFIG_DB") \
-    && [ -f "$DIASPORA_PATH/config/diaspora.yml" ]
+  if [ -f "$DIASPORA_CONFIG_DB" ] \
+      && (grep -qE '^\s*<<:\s*\*postgresql\b' "$DIASPORA_CONFIG_DB" \
+        && grep -q '^  host: postgresql$' "$DIASPORA_CONFIG_DB" \
+        && grep -q '^  password: postgres$' "$DIASPORA_CONFIG_DB" \
+        || grep -qE '^\s*<<:\s*\*mysql\b' "$DIASPORA_CONFIG_DB" \
+        && grep -q '^  host: mysql$' "$DIASPORA_CONFIG_DB" \
+        && grep -q '^  password: mysql$' "$DIASPORA_CONFIG_DB") \
+      && [ -f "$DIASPORA_PATH/config/diaspora.yml" ]; then
+    return 0
+  else
+    return 1
+  fi
 }
 
 exit_unconfigured() {
@@ -66,7 +70,7 @@ dia_build() {
 }
 
 dia_bundle() {
-  docker-compose run --no-deps $option diaspora /bin/sh -c "script/configure_bundler && bin/bundle install --full-index"
+  docker-compose run --rm --no-deps $option diaspora /bin/sh -c "script/configure_bundler && bin/bundle install --full-index"
 }
 
 dia_clean() {
@@ -77,28 +81,29 @@ dia_config() {
   [ ! -f "$DIASPORA_PATH"/public/source.tar.gz ] && touch "$DIASPORA_PATH"/public/source.tar.gz
   [ ! -f "$DIASPORA_CONFIG_DIA" ] && cp "$DIASPORA_CONFIG_DIA".example "$DIASPORA_CONFIG_DIA"
   [ ! -f "$DIASPORA_CONFIG_DB" ]  && cp "$DIASPORA_CONFIG_DB".example  "$DIASPORA_CONFIG_DB"
-  sed -i'' -r '1,7{s/^(\s+host:).*$/\1 postgresql/;s/^(\s+password:).*/\1 postgres/}' "$DIASPORA_CONFIG_DB"
-  sed -i'' -r '9,17{s/^(\s+host:).*$/\1 mysql/;s/^(\s+password:).*/\1 mysql/}' "$DIASPORA_CONFIG_DB"
   if [ "$DIASPORA_DOCKER_DB" == "postgresql" ]; then
-    sed -i'' -r '1,30{s/^  (<<: \*mysql)$/  #\1/;s/^  #(<<: *postgresql)$/  \1/}' "$DIASPORA_CONFIG_DB"
+    sed -i'' -r '1,7{s/^(  host:).*$/\1 postgresql/;s/^(  password:).*/\1 postgres/}' "$DIASPORA_CONFIG_DB"
+    sed -i'' -r '1,30{s/^  (<<: \*mysql)$/  #\1/;s/^  #(<<: \*postgresql)$/  \1/}' "$DIASPORA_CONFIG_DB"
   else
-    sed -i'' -r '1,30{s/^  (<<: \*postgresql)$/  #\1/;s/^  #(<<: *mysql)$/  \1/}' "$DIASPORA_CONFIG_DB"
+    sed -i'' -r '9,17{s/^(  host:).*$/\1 mysql/;s/^(  password:).*/\1 mysql/}' "$DIASPORA_CONFIG_DB"
+    sed -i'' -r '1,30{s/^  (<<: \*postgresql)$/  #\1/;s/^  #(<<: \*mysql)$/  \1/}' "$DIASPORA_CONFIG_DB"
   fi
 }
 
 dia_exec() {
   ! dia_is_configured && exit_unconfigured
-  if docker-compose ps --services --filter state=running | grep -q '^diaspora$'; then
+  if docker-compose ps --services --filter status=running | grep -q '^diaspora$'; then
     docker-compose exec $option diaspora "$@"
   else
-    docker-compose run $option diaspora "$@"
+    echo "No running instance found, starting containers..."
+    docker-compose run --rm $option diaspora "$@"
   fi
 }
 
 dia_migrate() {
   # TODO maybe if db was not running before, stop it again
   ! dia_is_configured && exit_unconfigured
-  docker-compose run $option diaspora bin/rake db:create db:migrate
+  docker-compose run --rm $option diaspora bin/rake db:create db:migrate
 }
 
 dia_pronto() {
@@ -108,11 +113,11 @@ dia_pronto() {
     dia_fetch_upstream
   fi
   cd -
-  docker-compose run --no-deps diaspora bin/pronto run --unstaged -c upstream/develop
+  docker-compose run --rm --no-deps diaspora bin/pronto run --unstaged -c upstream/develop
 }
 
 dia_restart() {
-  if docker-compose ps --services --filter state=running | grep -q '^diaspora$'; then
+  if docker-compose ps --services --filter status=running | grep -q '^diaspora$'; then
     docker-compose exec diaspora bin/eye restart diaspora
   else
     dia_start
@@ -121,11 +126,11 @@ dia_restart() {
 
 dia_rspec() {
   ! dia_is_configured && exit_unconfigured
-  docker-compose run diaspora /bin/sh -c 'RAILS_ENV="test" bin/rake db:create db:migrate'
-  if [ $# -eq 0]; then
-    docker-compose run diaspora bin/rake spec
+  docker-compose run --rm diaspora /bin/sh -c 'RAILS_ENV="test" bin/rake db:create db:migrate assets:generate_error_pages'
+  if [ $# -eq 0 ]; then
+    docker-compose run --rm diaspora bin/rake spec
   else
-    docker-compose run diaspora bin/rspec "$@"
+    docker-compose run --rm diaspora bin/rspec "$@"
   fi
 }
 
@@ -137,7 +142,7 @@ dia_setup() {
 }
 
 dia_start() {
-  ! is_configured && exit_unconfigured
+  ! dia_is_configured && exit_unconfigured
   docker-compose up $option diaspora
 }
 
