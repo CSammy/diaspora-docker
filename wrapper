@@ -117,7 +117,7 @@ dia_pronto() {
   if git diff-index --quiet HEAD --; then
     dia_fetch_upstream
   fi
-  cd -
+  cd - >/dev/null
   docker-compose run --rm --no-deps diaspora bin/pronto run --unstaged -c upstream/develop
 }
 
