@@ -4,18 +4,19 @@ RUN DEBIAN_FRONTEND=noninteractive \
     apt-get update \
     && apt-get install -y -qq \
         build-essential \
-        libssl-dev \
+        cmake \
+        curl \
+        ghostscript \
+        git \
+        imagemagick \
         libcurl4-openssl-dev \
         libidn11-dev \
+        libmagickwand-dev \
+        libmariadbclient-dev \
+        libpq-dev \
+        libssl-dev \
         libxml2-dev \
         libxslt-dev \
-        imagemagick \
-        ghostscript \
-        curl \
-        libmagickwand-dev \
-        git \
-        libpq-dev \
-        cmake \
         nodejs \
     && rm -rf /var/lib/apt/lists/*
 

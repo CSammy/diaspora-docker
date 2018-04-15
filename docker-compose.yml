@@ -18,15 +18,17 @@ services:
       - "${DIASPORA_DOCKER_DB}"
 
   postgresql:
-    image: postgres:9.6
+    image: postgres:10.3
     ports:
       - 55432:5432
     volumes:
       - postgresql_data:/var/lib/postgresql
 
   mysql:
-    image: mysql:5.7
+    image: mariadb:10.2
     ports:
       - 53306:3306
     volumes:
       - mysql_data:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: mysql
