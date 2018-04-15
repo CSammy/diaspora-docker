@@ -1,33 +1,21 @@
 version: "3.4"
 
-x-diaspora-base: &diaspora-base
-  image: diaspora:dev-latest
-  volumes:
-    - "${DIASPORA_PATH}:/home/diaspora/diaspora:rw"
-
-x-diaspora-db: &diaspora-db
-  depends_on:
-    - "${DIASPORA_DOCKER_DB}"
-
 volumes:
   postgresql_data:
   mysql_data:
 
 services:
-  diaspora-bundle:
-    << : *diaspora-base
-    command: /bin/sh -c "script/configure_bundler && bin/bundle install --full-index"
-
-  diaspora-migrations:
-    << : *diaspora-base
-    << : *diaspora-db
-    command: /bin/sh -c "bin/rake db:create db:migrate"
-
   diaspora:
-    << : *diaspora-base
-    << : *diaspora-db
+    build:
+      context: .
+      dockerfile: Dockerfile.diaspora
+    image: diaspora:dev-latest
+    volumes:
+      - "${DIASPORA_PATH}:/home/diaspora/diaspora:rw"
     ports:
       - 8080:3000
+    depends_on:
+      - "${DIASPORA_DOCKER_DB}"
 
   postgresql:
     image: postgres:9.6

@@ -1,20 +1,51 @@
 #!/bin/bash
 
+# ----- Helper functions -----
 print_usage() {
-  echo "$SCRIPT_NAME COMMAND"
+  echo "$SCRIPT_NAME -h|--help"
+  echo "$SCRIPT_NAME [OPTIONS] COMMAND [ARGS...]"
+  echo
+  echo "Options:"
+  echo "  -d              Detach from container after action. Ignored except for: bundle, exec, migrate, start"
   echo
   echo "Commands:"
-  echo "  build           Rebuild image"
-  echo "  bundle          Install gems using bundle"
+  echo "  build           Build diaspora:dev-latest. Rebuild if exists"
+  echo "  bundle          Install gems into the linked source folder using bundle"
+  echo "  clean           Delete all diaspora*-related containers and volumes including database"
+  echo "  config          Creates diaspora.yml and database.yml and configures for use with PostgreSQL"
+  echo "  exec            Execute ARGS in the project folder inside the running diaspora* container, or, if none is running, use a new one"
   echo "  migrate         Execute pending migrations (incl. database setup)"
-  echo "  setup           Build, bundle and migrate"
-  echo "  start           Start diaspora\* incl. database"
-  echo "  stop            Stop all diaspora\*-related containers"
-  echo "  clean           Delete all diaspora\*-related containers and volumes"
+  echo "  rspec           Run all tests, or ARGS as filenames if given"
+  echo "  setup           Alias for, in that order: build, config, bundle, migrate"
+  echo "  start           Start diaspora* incl. database"
   echo "  status          Show currently running containers and related images"
-#  echo "  rspec"
+  echo "  stop            Stop all diaspora*-related containers"
 }
 
+dia_fetch_upstream() {
+  if ! git remote show | grep -q '^upstream$'; then
+    git remote add upstream https://github.com/diaspora/diaspora.git
+  fi
+  git fetch upstream develop
+}
+
+dia_is_configured() {
+  return [ -f "$DIASPORA_CONFIG_DB" ] \
+    && (grep -qE '^\s*<<:\s*\*postgresql\b' "$DIASPORA_CONFIG_DB" \
+      && grep -q '^  host: postgresql$' "$DIASPORA_CONFIG_DB" \
+      && grep -q '^  password: postgres$' "$DIASPORA_CONFIG_DB" \
+      || grep -qE '^\s*<<:\s*\*mysql\b' "$DIASPORA_CONFIG_DB" \
+      && grep -q '^  host: mysql$' "$DIASPORA_CONFIG_DB" \
+      && grep -q '^  password: mysql$' "$DIASPORA_CONFIG_DB") \
+    && [ -f "$DIASPORA_PATH/config/diaspora.yml" ]
+}
+
+exit_unconfigured() {
+  echo "Fatal: Not properly configured. Run the 'setup' or 'config' command to configure."
+  exit 1
+}
+
+# ----- Command functions -----
 dia_build() {
   if [ -z "$UID" -o -z "$GID" ]; then
     # $UID is not builtin, determine using a program
@@ -28,37 +59,86 @@ dia_build() {
     EXT_UID=$UID
     EXT_GID=$GID
   fi
-  docker-compose rm -v diaspora
-  EXT_UID=$EXT_UID EXT_GID=$EXT_GID docker-compose -f docker-compose.build.yml build diaspora
+  docker-compose build \
+    --build-arg EXT_UID=$EXT_UID \
+    --build-arg EXT_GID=$EXT_GID \
+    diaspora
 }
 
 dia_bundle() {
-  docker-compose up $option diaspora-bundle
-  docker-compose rm --stop -v --force diaspora-bundle
+  docker-compose run --no-deps $option diaspora /bin/sh -c "script/configure_bundler && bin/bundle install --full-index"
+}
+
+dia_clean() {
+  docker-compose down
+}
+
+dia_config() {
+  [ ! -f "$DIASPORA_PATH"/public/source.tar.gz ] && touch "$DIASPORA_PATH"/public/source.tar.gz
+  [ ! -f "$DIASPORA_CONFIG_DIA" ] && cp "$DIASPORA_CONFIG_DIA".example "$DIASPORA_CONFIG_DIA"
+  [ ! -f "$DIASPORA_CONFIG_DB" ]  && cp "$DIASPORA_CONFIG_DB".example  "$DIASPORA_CONFIG_DB"
+  sed -i'' -r '1,7{s/^(\s+host:).*$/\1 postgresql/;s/^(\s+password:).*/\1 postgres/}' "$DIASPORA_CONFIG_DB"
+  sed -i'' -r '9,17{s/^(\s+host:).*$/\1 mysql/;s/^(\s+password:).*/\1 mysql/}' "$DIASPORA_CONFIG_DB"
+  if [ "$DIASPORA_DOCKER_DB" == "postgresql" ]; then
+    sed -i'' -r '1,30{s/^  (<<: \*mysql)$/  #\1/;s/^  #(<<: *postgresql)$/  \1/}' "$DIASPORA_CONFIG_DB"
+  else
+    sed -i'' -r '1,30{s/^  (<<: \*postgresql)$/  #\1/;s/^  #(<<: *mysql)$/  \1/}' "$DIASPORA_CONFIG_DB"
+  fi
+}
+
+dia_exec() {
+  ! dia_is_configured && exit_unconfigured
+  if docker-compose ps --services --filter state=running | grep -q '^diaspora$'; then
+    docker-compose exec $option diaspora "$@"
+  else
+    docker-compose run $option diaspora "$@"
+  fi
 }
 
 dia_migrate() {
-  docker-compose up $option diaspora-migrations
+  # TODO maybe if db was not running before, stop it again
+  ! dia_is_configured && exit_unconfigured
+  docker-compose run $option diaspora bin/rake db:create db:migrate
+}
+
+dia_pronto() {
+  ! dia_is_configured && exit_unconfigured
+  cd "$DIASPORA_PATH"
+  if git diff-index --quiet HEAD --; then
+    dia_fetch_upstream
+  fi
+  cd -
+  docker-compose run --no-deps diaspora bin/pronto run --unstaged -c upstream/develop
+}
+
+dia_restart() {
+  if docker-compose ps --services --filter state=running | grep -q '^diaspora$'; then
+    docker-compose exec diaspora bin/eye restart diaspora
+  else
+    dia_start
+  fi
+}
+
+dia_rspec() {
+  ! dia_is_configured && exit_unconfigured
+  docker-compose run diaspora /bin/sh -c 'RAILS_ENV="test" bin/rake db:create db:migrate'
+  if [ $# -eq 0]; then
+    docker-compose run diaspora bin/rake spec
+  else
+    docker-compose run diaspora bin/rspec "$@"
+  fi
 }
 
 dia_setup() {
   dia_build
-  # This is just a temporary (dev-only) solution
-  [ ! -f $DIASPORA_PATH/public/source.tar.gz ] && touch $DIASPORA_PATH/public/source.tar.gz
+  dia_config
   dia_bundle
   dia_migrate
 }
 
 dia_start() {
+  ! is_configured && exit_unconfigured
   docker-compose up $option diaspora
-}
-
-dia_stop() {
-  docker-compose stop
-}
-
-dia_clean() {
-  docker-compose down
 }
 
 dia_status() {
@@ -66,23 +146,38 @@ dia_status() {
   docker-compose images
 }
 
+dia_stop() {
+  docker-compose stop
+}
 
+
+# ----- Variables -----
 SCRIPT_NAME=$(basename $0)
-SCRIPT_PATH=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
-export DIASPORA_PATH=./diaspora.docker
-export DIASPORA_DOCKER_DB=postgresql
+SCRIPT_PATH="$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)"
+export DIASPORA_PATH="./diaspora.docker"
+export DIASPORA_CONFIG_DIA="$DIASPORA_PATH/config/diaspora.yml"
+export DIASPORA_CONFIG_DB="$DIASPORA_PATH/config/database.yml"
+
+DIASPORA_DOCKER_DB=postgresql
+if [ -f "$DIASPORA_CONFIG_DB" ] && grep -qE '^\s*<<:\s*\*mysql\b' "$DIASPORA_CONFIG_DB"; then
+  DIASPORA_DOCKER_DB=mysql
+fi
+export DIASPORA_DOCKER_DB
 
 
+# ----- Arg parsing -----
 if [ $# -lt 1 ]; then
   print_usage
   exit 1
 fi
 
+if [ $# -gt 0 ] && [ "$1" == "-d" ]; then
+  export option="-d"
+  shift
+fi
+
 dia_command=$1
 shift
-if [ $# -eq 1 ] && [ "$1" == "-d" ]; then
-  export option="-d"
-fi
 
 case $dia_command in
   --help|-h)
@@ -95,8 +190,26 @@ case $dia_command in
   bundle)
     dia_bundle
     ;;
+  clean)
+    dia_clean
+    ;;
+  config)
+    dia_config
+    ;;
+  exec)
+    dia_exec "$@"
+    ;;
   migrate)
     dia_migrate
+    ;;
+  pronto)
+    dia_pronto
+    ;;
+  restart)
+    dia_restart
+    ;;
+  rspec)
+    dia_rspec "$@"
     ;;
   setup)
     dia_setup
@@ -104,14 +217,11 @@ case $dia_command in
   start)
     dia_start
     ;;
-  stop)
-    dia_stop
-    ;;
-  clean)
-    dia_clean
-    ;;
   status)
     dia_status
+    ;;
+  stop)
+    dia_stop
     ;;
   *)
     print_usage
