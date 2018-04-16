@@ -16,11 +16,12 @@ print_usage() {
   echo "                    including database"
   echo "  config          Creates diaspora.yml and database.yml and configures for use"
   echo "                    with PostgreSQL"
+  echo "  cucumber        Run all cucumber tests, or only ARGS if given"
   echo "  exec            Execute ARGS in the project folder inside the running"
   echo "                    diaspora* container, or, if none is running, use a new one"
   echo "  migrate         Execute pending migrations (incl. database setup)"
   echo "  restart         Fast restart using bin/eye"
-  echo "  rspec           Run all tests, or ARGS as filenames if given"
+  echo "  rspec           Run all rspec tests, or only ARGS if given"
   echo "  setup           Alias for, in that order: build, config, bundle, migrate"
   echo "  start           Start diaspora* incl. database"
   echo "  status          Show currently running containers and related images"
@@ -80,6 +81,10 @@ dia_config() {
   [ ! -f "$DIASPORA_PATH"/public/source.tar.gz ] && touch "$DIASPORA_PATH"/public/source.tar.gz
   [ ! -f "$DIASPORA_CONFIG_DIA" ] && cp "$DIASPORA_CONFIG_DIA".example "$DIASPORA_CONFIG_DIA"
   [ ! -f "$DIASPORA_CONFIG_DB" ] && cp "$DIASPORA_CONFIG_DB".example  "$DIASPORA_CONFIG_DB"
+}
+
+dia_cucumber() {
+  docker-compose run --rm $option diaspora bin/cucumber "$@"
 }
 
 dia_exec() {
@@ -190,6 +195,9 @@ case $dia_command in
     ;;
   config)
     dia_config
+    ;;
+  cucumber)
+    dia_cucumber "$@"
     ;;
   exec)
     dia_exec "$@"
