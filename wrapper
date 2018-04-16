@@ -36,13 +36,7 @@ dia_fetch_upstream() {
 
 dia_is_configured() {
   if [ -f "$DIASPORA_CONFIG_DB" ] \
-      && (grep -qE '^\s*<<:\s*\*postgresql\b' "$DIASPORA_CONFIG_DB" \
-        && grep -q '^  host: postgresql$' "$DIASPORA_CONFIG_DB" \
-        && grep -q '^  password: postgres$' "$DIASPORA_CONFIG_DB" \
-        || grep -qE '^\s*<<:\s*\*mysql\b' "$DIASPORA_CONFIG_DB" \
-        && grep -q '^  host: mysql$' "$DIASPORA_CONFIG_DB" \
-        && grep -q '^  password: mysql$' "$DIASPORA_CONFIG_DB") \
-      && [ -f "$DIASPORA_PATH/config/diaspora.yml" ]; then
+      && [ -f "$DIASPORA_CONFIG_DIA" ]; then
     return 0
   else
     return 1
@@ -85,15 +79,7 @@ dia_clean() {
 dia_config() {
   [ ! -f "$DIASPORA_PATH"/public/source.tar.gz ] && touch "$DIASPORA_PATH"/public/source.tar.gz
   [ ! -f "$DIASPORA_CONFIG_DIA" ] && cp "$DIASPORA_CONFIG_DIA".example "$DIASPORA_CONFIG_DIA"
-  if [ ! -f "$DIASPORA_CONFIG_DB" ]; then
-    cp "$DIASPORA_CONFIG_DB".example  "$DIASPORA_CONFIG_DB"
-    if [ "$DIASPORA_DOCKER_DB" == "postgresql" ]; then
-      sed -i'' -r '1,7{s/^(  host:).*$/\1 postgresql/;s/^(  password:).*/\1 postgres/}' "$DIASPORA_CONFIG_DB"
-      sed -i'' -r '1,30{s/^  (<<: \*mysql)$/  #\1/;s/^  #(<<: \*postgresql)$/  \1/}' "$DIASPORA_CONFIG_DB"
-    else
-      sed -i'' -r '9,17{s/^(  host:).*$/\1 mysql/;s/^(  password:).*/\1 mysql/}' "$DIASPORA_CONFIG_DB"
-      sed -i'' -r '1,30{s/^  (<<: \*postgresql)$/  #\1/;s/^  #(<<: \*mysql)$/  \1/}' "$DIASPORA_CONFIG_DB"
-  fi
+  [ ! -f "$DIASPORA_CONFIG_DB" ] && cp "$DIASPORA_CONFIG_DB".example  "$DIASPORA_CONFIG_DB"
 }
 
 dia_exec() {
