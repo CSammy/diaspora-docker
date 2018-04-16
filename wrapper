@@ -118,7 +118,9 @@ dia_restart() {
 
 dia_rspec() {
   ! dia_is_configured && exit_unconfigured
-  docker-compose run --rm diaspora /bin/sh -c 'RAILS_ENV="test" bin/rake db:create db:migrate assets:generate_error_pages'
+  addendum=""
+  [ -f "$DIASPORA_PATH"/public/404.html ] && addendum="assets:generate_error_pages"
+  docker-compose run --rm diaspora /bin/sh -c "RAILS_ENV=test bin/rake db:create db:migrate ${addendum}"
   docker-compose run --rm diaspora bin/rspec "$@"
 }
 
