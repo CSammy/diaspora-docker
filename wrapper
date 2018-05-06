@@ -19,10 +19,13 @@ print_usage() {
   echo "  cucumber        Run all cucumber tests, or only ARGS if given"
   echo "  exec            Execute ARGS in the project folder inside the running"
   echo "                    diaspora* container, or, if none is running, use a new one"
+  echo "  jasmine         Run all jasmine tests"
   echo "  migrate         Execute pending migrations (incl. database setup)"
   echo "  restart         Fast restart using bin/eye"
   echo "  rspec           Run all rspec tests, or only ARGS if given"
-  echo "  setup           Alias for, in that order: build, config, bundle, migrate"
+  echo "  setup           Alias for, in that order:"
+  echo "                    build, config, bundle, migrate, setup-tests"
+  echo "  setup-tests     Creates files and database structures for tests"
   echo "  start           Start diaspora* incl. database"
   echo "  status          Show currently running containers and related images"
   echo "  stop            Stop all diaspora*-related containers"
@@ -97,6 +100,10 @@ dia_exec() {
   fi
 }
 
+dia_jasmine() {
+  docker-compose run --rm $option diaspora /bin/bash -c 'RAILS_ENV=test bin/rake tests:generate_fixtures && RAILS_ENV=test bin/rake jasmine:ci'
+}
+
 dia_migrate() {
   # TODO maybe if db was not running before, stop it again
   ! dia_is_configured && exit_unconfigured
@@ -134,6 +141,11 @@ dia_setup() {
   dia_config
   dia_bundle
   dia_migrate
+  dia_setup_tests
+}
+
+dia_setup_tests() {
+  docker-compose run --rm diaspora /bin/sh -c "RAILS_ENV=test bin/rake db:create db:migrate tests:generate_fixtures assets:generate_error_pages"
 }
 
 dia_start() {
@@ -202,6 +214,9 @@ case $dia_command in
   exec)
     dia_exec "$@"
     ;;
+  jasmine)
+    dia_jasmine
+    ;;
   migrate)
     dia_migrate
     ;;
@@ -216,6 +231,9 @@ case $dia_command in
     ;;
   setup)
     dia_setup
+    ;;
+  setup-tests)
+    dia_setup_tests
     ;;
   start)
     dia_start
